@@ -24,7 +24,7 @@ export async function runSponsorAnalysis({ eventName, eventType, city, sponsorGo
 
   const raw = await callClaude(SPONSOR_ANALYSIS_SYSTEM, userPrompt, {
     model: MODELS.smart,
-    maxTokens: 3000,
+    maxTokens: 8000,
   });
 
   const parsed = parseJSON(raw);

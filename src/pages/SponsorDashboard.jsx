@@ -1,21 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Users, TrendingUp, CheckCircle, ArrowLeft, ChevronDown, ChevronUp, Mail } from 'lucide-react';
-import { LeadRow, LeadTableHeader } from '../components/dashboard/LeadRow';
-import { STATUS_CONFIG } from '../components/dashboard/StatusBadge';
+import { Search, ArrowLeft, Download, ChevronDown, ChevronUp, Users, Check, X, Database, ChevronRight } from 'lucide-react';
+import { CategoryGroup } from '../components/dashboard/CategoryGroup';
 import { useLeads } from '../hooks/useLeads';
-import { useGmail } from '../hooks/useGmail';
-
-// ── Stat card ─────────────────────────────────────────────────────────────────
-
-function Stat({ label, value, sub }) {
-  return (
-    <div className="px-5 py-4 rounded-xl border border-zinc-800 bg-zinc-900/40">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-600 mb-1">{label}</p>
-      <p className="text-2xl font-bold text-white tabular-nums">{value}</p>
-      {sub && <p className="text-[11px] text-zinc-600 mt-0.5">{sub}</p>}
-    </div>
-  );
-}
+import { useAirtableOAuth } from '../hooks/useAirtableOAuth';
+import { exportLeadsCSV } from '../services/export';
 
 // ── Audience panel ────────────────────────────────────────────────────────────
 
@@ -28,7 +16,7 @@ const PRIORITY_PILL = {
 function AudiencePanel({ audience, categories }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 mb-5 overflow-hidden">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 mb-6 overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-zinc-800/30 transition-colors"
@@ -42,7 +30,6 @@ function AudiencePanel({ audience, categories }) {
         </div>
         {open ? <ChevronUp size={13} className="text-zinc-600" /> : <ChevronDown size={13} className="text-zinc-600" />}
       </button>
-
       {open && (
         <div className="px-5 pb-5 border-t border-zinc-800">
           <p className="text-sm text-zinc-400 leading-relaxed mt-4 mb-4">{audience.summary}</p>
@@ -73,63 +60,63 @@ function AudiencePanel({ audience, categories }) {
   );
 }
 
-// ── Toolbar ───────────────────────────────────────────────────────────────────
+// ── Airtable connection banner ────────────────────────────────────────────────
 
-function Toolbar({ query, onQuery, statusFilter, onStatusFilter, categoryFilter, onCategoryFilter, categories, selectedCount, onApproveSelected, onRemoveSelected }) {
-  return (
-    <div className="flex items-center gap-3 mb-4 flex-wrap">
-      {/* Search */}
-      <div className="relative flex-1 min-w-[200px]">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-        <input
-          type="text"
-          value={query}
-          onChange={e => onQuery(e.target.value)}
-          placeholder="Search companies, categories…"
-          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
-        />
-      </div>
-
-      {/* Status filter */}
-      <select
-        value={statusFilter}
-        onChange={e => onStatusFilter(e.target.value)}
-        className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600 transition-colors cursor-pointer appearance-none pr-8"
-      >
-        <option value="">All statuses</option>
-        {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-          <option key={k} value={k}>{v.label}</option>
-        ))}
-      </select>
-
-      {/* Category filter */}
-      <select
-        value={categoryFilter}
-        onChange={e => onCategoryFilter(e.target.value)}
-        className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-600 transition-colors cursor-pointer appearance-none pr-8"
-      >
-        <option value="">All categories</option>
-        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-      </select>
-
-      {/* Bulk actions */}
-      {selectedCount > 0 && (
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-zinc-500">{selectedCount} selected</span>
-          <button
-            onClick={onApproveSelected}
-            className="px-3 py-1.5 rounded-lg border border-blue-800 bg-blue-950/60 text-blue-400 text-xs font-medium hover:bg-blue-900/60 transition-colors"
-          >
-            Approve all
-          </button>
-          <button
-            onClick={onRemoveSelected}
-            className="px-3 py-1.5 rounded-lg border border-red-900 bg-red-950/40 text-red-400 text-xs font-medium hover:bg-red-900/40 transition-colors"
-          >
-            Remove all
-          </button>
+function AirtableBanner({ step, error, bases, baseName, connected, onConnect, onSelectBase, onDisconnect }) {
+  if (connected) {
+    return (
+      <div className="flex items-center justify-between px-5 py-3 mb-6 rounded-xl border border-yellow-800/40 bg-yellow-950/20">
+        <div className="flex items-center gap-2">
+          <Check size={13} className="text-yellow-400" />
+          <span className="text-xs text-yellow-300 font-medium">Airtable connected</span>
+          {baseName && <span className="text-xs text-yellow-600">· {baseName}</span>}
         </div>
-      )}
+        <button onClick={onDisconnect} className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors">
+          Disconnect
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'selecting' && bases.length > 0) {
+    return (
+      <div className="px-5 py-4 mb-6 rounded-xl border border-yellow-800/50 bg-yellow-950/20">
+        <p className="text-xs font-semibold text-yellow-300 mb-3">
+          Select the Airtable base where outreach emails will be queued:
+        </p>
+        <div className="space-y-1.5">
+          {bases.map(base => (
+            <button
+              key={base.id}
+              onClick={() => onSelectBase(base.id, base.name)}
+              className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-zinc-700 bg-zinc-800 hover:border-yellow-700/60 hover:bg-yellow-950/30 text-left transition-colors group"
+            >
+              <div className="flex items-center gap-2.5">
+                <Database size={13} className="text-zinc-500 group-hover:text-yellow-400 transition-colors" />
+                <span className="text-sm text-white">{base.name}</span>
+              </div>
+              <ChevronRight size={13} className="text-zinc-600 group-hover:text-yellow-400 transition-colors" />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between px-5 py-4 mb-6 rounded-xl border border-zinc-700 bg-zinc-900/60">
+      <div>
+        <p className="text-sm font-semibold text-white mb-0.5">Connect Airtable to send outreach</p>
+        <p className="text-xs text-zinc-500">Log in and select a base — your sequences queue there automatically.</p>
+        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+      </div>
+      <button
+        onClick={onConnect}
+        disabled={step === 'authorizing'}
+        className="shrink-0 ml-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-zinc-950 text-xs font-bold transition-colors"
+      >
+        {step === 'authorizing' ? 'Opening…' : 'Connect Airtable →'}
+      </button>
     </div>
   );
 }
@@ -137,62 +124,46 @@ function Toolbar({ query, onQuery, statusFilter, onStatusFilter, categoryFilter,
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export default function SponsorDashboard({ sponsors, analysisResult, eventName, city, eventType, sponsorGoals, goBack }) {
-  const { leads, update, remove, approve, setStatus, STATUSES } = useLeads(sponsors);
-  const { isConnected, isConnecting, connect, disconnect } = useGmail();
+  const { leads } = useLeads(sponsors);
+  const {
+    connected: airtableConnected,
+    baseName, bases, step: airtableStep, error: airtableError,
+    connect: airtableConnect, selectBase, disconnect: airtableDisconnect,
+  } = useAirtableOAuth();
 
-  const [selected, setSelected] = useState(new Set());
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [sequences, setSequences] = useState({});
 
-  // Derived stats
-  const approvedCount  = leads.filter(l => l.outreach_status === 'approved').length;
-  const contactedCount = leads.filter(l => ['contacted', 'replied'].includes(l.outreach_status)).length;
-  const avgScore       = leads.length ? Math.round(leads.reduce((s, l) => s + (l.fit_score || 0), 0) / leads.length) : 0;
-  const categories     = [...new Set(leads.map(l => l.category).filter(Boolean))];
+  const saveSequence = (category, emails) =>
+    setSequences(prev => ({ ...prev, [category]: emails }));
 
-  // Filtered leads
-  const filtered = useMemo(() => {
+  const grouped = useMemo(() => {
     const q = query.toLowerCase();
-    return leads.filter(l => {
-      const matchQ = !q || (l.company || l.name || '').toLowerCase().includes(q) || (l.category || '').toLowerCase().includes(q);
-      const matchS = !statusFilter || l.outreach_status === statusFilter;
-      const matchC = !categoryFilter || l.category === categoryFilter;
-      return matchQ && matchS && matchC;
-    });
-  }, [leads, query, statusFilter, categoryFilter]);
+    const filtered = leads.filter(l =>
+      !q ||
+      (l.company || l.name || '').toLowerCase().includes(q) ||
+      (l.contact || '').toLowerCase().includes(q) ||
+      (l.category || '').toLowerCase().includes(q)
+    );
+    return filtered.reduce((acc, lead) => {
+      const cat = lead.category || 'Uncategorized';
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(lead);
+      return acc;
+    }, {});
+  }, [leads, query]);
 
-  const allFilteredSelected = filtered.length > 0 && filtered.every(l => selected.has(l.id));
-
-  const toggleSelect = (id, val) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      val ? next.add(id) : next.delete(id);
-      return next;
-    });
-  };
-
-  const selectAll = (val) => {
-    setSelected(val ? new Set(filtered.map(l => l.id)) : new Set());
-  };
-
-  const approveSelected = () => {
-    selected.forEach(id => approve(id));
-    setSelected(new Set());
-  };
-
-  const removeSelected = () => {
-    selected.forEach(id => remove(id));
-    setSelected(new Set());
-  };
-
-  const noClientId = !import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const categoryRationale = useMemo(() => {
+    const map = {};
+    (analysisResult?.categories || []).forEach(c => { map[c.name] = c.rationale; });
+    return map;
+  }, [analysisResult]);
 
   return (
     <div className="min-h-screen px-6 py-10">
-      <div className="max-w-[1200px] mx-auto">
+      <div className="max-w-5xl mx-auto">
 
-        {/* Page header */}
+        {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
             <button onClick={goBack} className="flex items-center gap-1.5 text-xs text-zinc-600 hover:text-zinc-400 transition-colors mb-4">
@@ -204,86 +175,74 @@ export default function SponsorDashboard({ sponsors, analysisResult, eventName, 
             </p>
           </div>
 
-          <div className="flex items-center gap-2 mt-8">
-            {noClientId ? (
-              <span className="text-[11px] text-zinc-700 px-3 py-1.5 rounded-full border border-zinc-800">
-                Add VITE_GOOGLE_CLIENT_ID to enable Gmail
-              </span>
-            ) : isConnected ? (
-              <button onClick={disconnect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition-colors">
-                <Mail size={12} className="text-emerald-400" />
-                Gmail connected
-              </button>
-            ) : (
-              <button onClick={connect} disabled={isConnecting} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-xs text-zinc-300 transition-colors">
-                <Mail size={12} />
-                {isConnecting ? 'Connecting…' : 'Connect Gmail'}
-              </button>
-            )}
-          </div>
+          <div />
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          <Stat label="Total Leads"  value={leads.length}   sub={`${filtered.length} shown`} />
-          <Stat label="Approved"     value={approvedCount}  sub="ready for outreach" />
-          <Stat label="Contacted"    value={contactedCount} sub="in progress" />
-          <Stat label="Avg Fit Score" value={avgScore}      sub="out of 100" />
-        </div>
+        {/* Airtable connection banner */}
+        <AirtableBanner
+          step={airtableStep}
+          error={airtableError}
+          bases={bases}
+          baseName={baseName}
+          connected={airtableConnected}
+          onConnect={airtableConnect}
+          onSelectBase={selectBase}
+          onDisconnect={airtableDisconnect}
+        />
 
         {/* Audience analysis */}
         {analysisResult?.audience && (
           <AudiencePanel audience={analysisResult.audience} categories={analysisResult.categories} />
         )}
 
-        {/* Toolbar */}
-        <Toolbar
-          query={query} onQuery={setQuery}
-          statusFilter={statusFilter} onStatusFilter={setStatusFilter}
-          categoryFilter={categoryFilter} onCategoryFilter={setCategoryFilter}
-          categories={categories}
-          selectedCount={selected.size}
-          onApproveSelected={approveSelected}
-          onRemoveSelected={removeSelected}
-        />
-
-        {/* Table */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 overflow-hidden">
-          <LeadTableHeader allSelected={allFilteredSelected} onSelectAll={selectAll} />
-
-          <div>
-            {filtered.length === 0 ? (
-              <div className="py-16 text-center text-zinc-600 text-sm">
-                No leads match your filters.
-              </div>
-            ) : (
-              filtered.map(lead => (
-                <LeadRow
-                  key={lead.id}
-                  lead={lead}
-                  selected={selected.has(lead.id)}
-                  onSelect={v => toggleSelect(lead.id, v)}
-                  onUpdate={patch => update(lead.id, patch)}
-                  onApprove={() => approve(lead.id)}
-                  onRemove={() => remove(lead.id)}
-                  onSetStatus={s => setStatus(lead.id, s)}
-                  statuses={STATUSES}
-                />
-              ))
-            )}
+        {/* Search + export */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search companies, contacts, categories…"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 transition-colors"
+            />
           </div>
-
-          {/* Footer */}
-          <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-between">
-            <span className="text-[11px] text-zinc-600">
-              {filtered.length} of {leads.length} leads
-            </span>
-            <div className="flex items-center gap-3 text-[11px] text-zinc-700">
-              <span className="flex items-center gap-1"><TrendingUp size={11} /> Click any cell to edit</span>
-              <span className="flex items-center gap-1"><CheckCircle size={11} /> Hover to approve or remove</span>
-            </div>
-          </div>
+          <button
+            onClick={() => exportLeadsCSV(leads, sequences, eventName)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition-colors shrink-0"
+          >
+            <Download size={12} />
+            Export CSV
+          </button>
         </div>
+
+        {/* Category groups */}
+        <div className="space-y-4">
+          {Object.entries(grouped).map(([category, categoryLeads], index) => (
+            <CategoryGroup
+              key={category}
+              category={category}
+              leads={categoryLeads}
+              sequence={sequences[category] ?? null}
+              onSequenceGenerated={emails => saveSequence(category, emails)}
+              eventName={eventName}
+              eventType={eventType}
+              city={city}
+              sponsorGoals={sponsorGoals}
+              categoryRationale={categoryRationale[category]}
+              airtableConnected={airtableConnected}
+              defaultOpen={index === 0}
+            />
+          ))}
+
+          {Object.keys(grouped).length === 0 && (
+            <div className="py-16 text-center text-zinc-600 text-sm">No leads match your search.</div>
+          )}
+        </div>
+
+        <p className="text-center text-[11px] text-zinc-700 mt-6">
+          {leads.length} leads · {Object.keys(grouped).length} categories
+        </p>
       </div>
     </div>
   );

@@ -59,7 +59,7 @@ export function buildAnalysisPrompt({ eventName, eventType, city, sponsorGoals, 
     city,
     sponsorGoals: sponsorGoals ? `Sponsor Goals: ${sponsorGoals}` : '',
     briefSection: rawText
-      ? `\nEvent Brief (extracted text):\n${rawText.slice(0, 6000)}`
+      ? `\nEvent Brief (extracted text):\n${rawText.slice(0, 4000)}`
       : '',
   });
 }

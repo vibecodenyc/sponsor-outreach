@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 const SCOPES = [
+  'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.compose',
   'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/userinfo.profile',
 ].join(' ');
 
 export function useGmail() {
