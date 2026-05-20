@@ -1,18 +1,11 @@
 const BASE_URL = 'https://api.airtable.com/v0';
 
-// OAuth token takes priority, falls back to legacy API key
 function getBearerToken() {
-  return localStorage.getItem('at_token')
-    || localStorage.getItem('airtable_api_key')
-    || import.meta.env.VITE_AIRTABLE_API_KEY
-    || '';
+  return localStorage.getItem('airtable_api_key') || import.meta.env.VITE_AIRTABLE_API_KEY || '';
 }
 
 function getBaseId() {
-  return localStorage.getItem('at_base_id')
-    || localStorage.getItem('airtable_base_id')
-    || import.meta.env.VITE_AIRTABLE_BASE_ID
-    || '';
+  return localStorage.getItem('airtable_base_id') || import.meta.env.VITE_AIRTABLE_BASE_ID || '';
 }
 
 function headers() {

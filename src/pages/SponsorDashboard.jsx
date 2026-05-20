@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ArrowLeft, Download, ChevronDown, ChevronUp, Users, Check, X, Database, ChevronRight } from 'lucide-react';
+import { Search, ArrowLeft, Download, ChevronDown, ChevronUp, Users, Check, X, Mail } from 'lucide-react';
 import { CategoryGroup } from '../components/dashboard/CategoryGroup';
 import { useLeads } from '../hooks/useLeads';
-import { useAirtableOAuth } from '../hooks/useAirtableOAuth';
+import { useGmail } from '../hooks/useGmail';
+import { useAirtable } from '../hooks/useAirtable';
 import { exportLeadsCSV } from '../services/export';
 
 // ── Audience panel ────────────────────────────────────────────────────────────
@@ -60,63 +61,63 @@ function AudiencePanel({ audience, categories }) {
   );
 }
 
-// ── Airtable connection banner ────────────────────────────────────────────────
+// ── Airtable connect button ───────────────────────────────────────────────────
 
-function AirtableBanner({ step, error, bases, baseName, connected, onConnect, onSelectBase, onDisconnect }) {
+function AirtableButton({ connected, onConnect, onDisconnect }) {
+  const [open, setOpen]     = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [baseId, setBaseId] = useState('');
+
   if (connected) {
     return (
-      <div className="flex items-center justify-between px-5 py-3 mb-6 rounded-xl border border-yellow-800/40 bg-yellow-950/20">
-        <div className="flex items-center gap-2">
-          <Check size={13} className="text-yellow-400" />
-          <span className="text-xs text-yellow-300 font-medium">Airtable connected</span>
-          {baseName && <span className="text-xs text-yellow-600">· {baseName}</span>}
-        </div>
-        <button onClick={onDisconnect} className="text-[11px] text-zinc-600 hover:text-zinc-400 transition-colors">
-          Disconnect
-        </button>
-      </div>
-    );
-  }
-
-  if (step === 'selecting' && bases.length > 0) {
-    return (
-      <div className="px-5 py-4 mb-6 rounded-xl border border-yellow-800/50 bg-yellow-950/20">
-        <p className="text-xs font-semibold text-yellow-300 mb-3">
-          Select the Airtable base where outreach emails will be queued:
-        </p>
-        <div className="space-y-1.5">
-          {bases.map(base => (
-            <button
-              key={base.id}
-              onClick={() => onSelectBase(base.id, base.name)}
-              className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-zinc-700 bg-zinc-800 hover:border-yellow-700/60 hover:bg-yellow-950/30 text-left transition-colors group"
-            >
-              <div className="flex items-center gap-2.5">
-                <Database size={13} className="text-zinc-500 group-hover:text-yellow-400 transition-colors" />
-                <span className="text-sm text-white">{base.name}</span>
-              </div>
-              <ChevronRight size={13} className="text-zinc-600 group-hover:text-yellow-400 transition-colors" />
-            </button>
-          ))}
-        </div>
-      </div>
+      <button
+        onClick={onDisconnect}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-yellow-700/60 bg-yellow-950/40 hover:bg-yellow-950/70 text-yellow-400 text-xs font-medium transition-colors"
+      >
+        <Check size={12} />
+        Airtable connected
+      </button>
     );
   }
 
   return (
-    <div className="flex items-center justify-between px-5 py-4 mb-6 rounded-xl border border-zinc-700 bg-zinc-900/60">
-      <div>
-        <p className="text-sm font-semibold text-white mb-0.5">Connect Airtable to send outreach</p>
-        <p className="text-xs text-zinc-500">Log in and select a base — your sequences queue there automatically.</p>
-        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-      </div>
+    <div className="relative">
       <button
-        onClick={onConnect}
-        disabled={step === 'authorizing'}
-        className="shrink-0 ml-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-zinc-950 text-xs font-bold transition-colors"
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-yellow-400 hover:bg-yellow-300 text-zinc-950 text-xs font-bold transition-colors"
       >
-        {step === 'authorizing' ? 'Opening…' : 'Connect Airtable →'}
+        Connect Airtable
       </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl z-50 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-white">Connect Airtable</p>
+            <button onClick={() => setOpen(false)} className="text-zinc-600 hover:text-zinc-400"><X size={14} /></button>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">API Key</label>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="pat..."
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">Base ID</label>
+              <input type="text" value={baseId} onChange={e => setBaseId(e.target.value)} placeholder="app..."
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
+            </div>
+            <button
+              onClick={() => { onConnect(apiKey, baseId); setOpen(false); setApiKey(''); setBaseId(''); }}
+              disabled={!apiKey.trim() || !baseId.trim()}
+              className="w-full py-2 rounded-lg bg-yellow-400 hover:bg-yellow-300 disabled:opacity-40 text-zinc-950 text-xs font-bold transition-colors"
+            >
+              Save
+            </button>
+          </div>
+          <p className="text-[10px] text-zinc-600 mt-3 leading-relaxed">
+            Get your API key at airtable.com/create/tokens · Base ID starts with "app"
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -125,11 +126,8 @@ function AirtableBanner({ step, error, bases, baseName, connected, onConnect, on
 
 export default function SponsorDashboard({ sponsors, analysisResult, eventName, city, eventType, sponsorGoals, goBack }) {
   const { leads } = useLeads(sponsors);
-  const {
-    connected: airtableConnected,
-    baseName, bases, step: airtableStep, error: airtableError,
-    connect: airtableConnect, selectBase, disconnect: airtableDisconnect,
-  } = useAirtableOAuth();
+  const { accessToken, isConnected: gmailConnected, isConnecting, connect: gmailConnect, disconnect: gmailDisconnect } = useGmail();
+  const { connected: airtableConnected, connect: airtableConnect, disconnect: airtableDisconnect } = useAirtable();
 
   const [query, setQuery] = useState('');
   const [sequences, setSequences] = useState({});
@@ -175,20 +173,25 @@ export default function SponsorDashboard({ sponsors, analysisResult, eventName, 
             </p>
           </div>
 
-          <div />
+          <div className="flex items-center gap-2 mt-8">
+            <AirtableButton
+              connected={airtableConnected}
+              onConnect={airtableConnect}
+              onDisconnect={airtableDisconnect}
+            />
+            {gmailConnected ? (
+              <button onClick={gmailDisconnect} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-red-800/60 bg-red-950/40 hover:bg-red-950/70 text-red-400 text-xs font-medium transition-colors">
+                <Check size={12} />
+                Gmail connected
+              </button>
+            ) : (
+              <button onClick={gmailConnect} disabled={isConnecting} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#EA4335] hover:bg-[#c5392d] disabled:opacity-50 text-white text-xs font-semibold transition-colors">
+                <Mail size={12} />
+                {isConnecting ? 'Connecting…' : 'Connect Gmail'}
+              </button>
+            )}
+          </div>
         </div>
-
-        {/* Airtable connection banner */}
-        <AirtableBanner
-          step={airtableStep}
-          error={airtableError}
-          bases={bases}
-          baseName={baseName}
-          connected={airtableConnected}
-          onConnect={airtableConnect}
-          onSelectBase={selectBase}
-          onDisconnect={airtableDisconnect}
-        />
 
         {/* Audience analysis */}
         {analysisResult?.audience && (
@@ -230,11 +233,11 @@ export default function SponsorDashboard({ sponsors, analysisResult, eventName, 
               city={city}
               sponsorGoals={sponsorGoals}
               categoryRationale={categoryRationale[category]}
+              accessToken={accessToken}
               airtableConnected={airtableConnected}
               defaultOpen={index === 0}
             />
           ))}
-
           {Object.keys(grouped).length === 0 && (
             <div className="py-16 text-center text-zinc-600 text-sm">No leads match your search.</div>
           )}

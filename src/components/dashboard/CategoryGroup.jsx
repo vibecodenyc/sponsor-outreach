@@ -3,6 +3,7 @@ import { Sparkles, Copy, Check, RefreshCw, ChevronDown, ChevronUp, Send, AlertCi
 import { CompanyAvatar } from './CompanyAvatar';
 import { FitBar } from './FitBar';
 import { generateCategorySequence } from '../../services/outreach';
+import { gmailGetProfile, gmailSendNotification, gmailGetUserName } from '../../services/gmail';
 import { queueOutreachEmails } from '../../services/airtable';
 
 // ── Time / day options ────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ function formatSendTime(day, time) {
 
 // ── Placeholder replacement ───────────────────────────────────────────────────
 
-function fillPlaceholders(text, lead) {
+function fillPlaceholders(text, lead, yourName = '') {
   const firstName = (lead.contact || '').split(' ')[0] || 'there';
   const lastName  = (lead.contact || '').split(' ').slice(1).join(' ') || '';
   return text
@@ -52,7 +53,7 @@ function fillPlaceholders(text, lead) {
     .replace(/LAST_NAME/g,    lastName)
     .replace(/COMPANY_NAME/g, lead.company || lead.name || '')
     .replace(/THEIR_TITLE/g,  lead.title || 'your team')
-    .replace(/YOUR_NAME/g,    '');
+    .replace(/YOUR_NAME/g,    yourName);
 }
 
 // ── Token highlighter ─────────────────────────────────────────────────────────
@@ -202,10 +203,16 @@ function EmailCard({ email, schedule, onScheduleChange, onEdit }) {
 export function CategoryGroup({
   category, leads, sequence, onSequenceGenerated,
   eventName, eventType, city, sponsorGoals, categoryRationale,
-  airtableConnected, defaultOpen,
+  accessToken, airtableConnected, defaultOpen,
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [edits, setEdits] = useState({});
+  const [yourName, setYourName] = useState('');
+
+  useEffect(() => {
+    if (!accessToken) return;
+    gmailGetUserName(accessToken).then(name => { if (name) setYourName(name); });
+  }, [accessToken]);
 
   const editEmail = (type, patch) =>
     setEdits(prev => ({ ...prev, [type]: { ...(prev[type] || {}), ...patch } }));
@@ -258,8 +265,8 @@ export function CategoryGroup({
             category,
             eventName: eventName || '',
             to:        lead.email,
-            subject:   fillPlaceholders(email.subject, lead),
-            body:      fillPlaceholders(email.body,    lead),
+            subject:   fillPlaceholders(email.subject, lead, yourName),
+            body:      fillPlaceholders(email.body,    lead, yourName),
             sendAt:    sendTime.toISOString(),
             stage:     email.label,
           });
@@ -268,6 +275,22 @@ export function CategoryGroup({
 
       if (airtableConnected) {
         await queueOutreachEmails(emailsToQueue);
+      }
+
+      // Notify yourself via Gmail
+      if (accessToken) {
+        try {
+          const profile = await gmailGetProfile(accessToken);
+          const lines = emailsToQueue.map(e =>
+            `• ${e.company} (${e.leadName}) — ${e.stage}\n  ${e.subject}\n  Send on: ${new Date(e.sendAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+          );
+          await gmailSendNotification({
+            toSelf: profile.emailAddress,
+            subject: `Outreach queued: ${leads.length} ${category} lead${leads.length > 1 ? 's' : ''} — ${eventName || 'your event'}`,
+            body: [`Queued for ${category} at ${eventName || 'your event'}.`, '', ...lines].join('\n'),
+            accessToken,
+          });
+        } catch (_) { /* notification failure is non-fatal */ }
       }
 
       setPushResults({ total: emailsToQueue.length });

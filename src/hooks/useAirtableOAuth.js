@@ -30,15 +30,14 @@ async function sha256b64url(str) {
 
 export function useAirtableOAuth() {
   const [token,    setToken]    = useState(() => localStorage.getItem(LS.token));
-  const [baseId,   setBaseId]   = useState(() => localStorage.getItem(LS.baseId)   || import.meta.env.VITE_AIRTABLE_BASE_ID);
+  const [baseId,   setBaseId]   = useState(() => localStorage.getItem(LS.baseId));
   const [baseName, setBaseName] = useState(() => localStorage.getItem(LS.baseName));
   const [bases,    setBases]    = useState([]);
   const [step,     setStep]     = useState('idle'); // idle | authorizing | selecting | done
   const [error,    setError]    = useState(null);
 
-  const connected = !!(
-    (token || import.meta.env.VITE_AIRTABLE_API_KEY) && baseId
-  );
+  // Only consider connected when the user has gone through OAuth
+  const connected = !!(token && baseId);
 
   // Listen for the code coming back from the OAuth popup
   useEffect(() => {
