@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/extravert", "destination": "https://extra-vert.vercel.app/extravert" },
+    { "source": "/extravert/(.*)", "destination": "https://extra-vert.vercel.app/extravert/$1" },
     { "source": "/sponsor-pilot/(.*)", "destination": "/index.html" },
     { "source": "/sponsor-pilot",       "destination": "/index.html" }
   ],
